@@ -58,12 +58,12 @@ This script initializes necessary database tables required for logging script ex
 
 ## Example SQL Script Format
 ```sql
---[START-V-1]
+--[START-V-1]--
 CREATE TABLE Test (
     ID INT PRIMARY KEY,
     Name NVARCHAR(50)
 );
---[END-V-1]
+--[END-V-1]--
 ```
 
 ## Logging & Event Monitoring
