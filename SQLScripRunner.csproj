@@ -33,6 +33,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="_Docs\" />
     <Folder Include="Scripts\" />
   </ItemGroup>
 
