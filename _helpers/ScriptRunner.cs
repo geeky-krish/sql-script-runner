@@ -11,12 +11,20 @@ internal class ScriptRunner
 {
     private readonly ILogger<ScriptRunner> _logger;
     private readonly AppSettings _settings;
+    private readonly DatabaseManager _databaseManager;
+    private readonly EventLogger _eventLogger;
     private string _script = string.Empty;
 
-    public ScriptRunner(ILogger<ScriptRunner> logger, IOptions<AppSettings> options)
+    public ScriptRunner(
+        ILogger<ScriptRunner> logger,
+        IOptions<AppSettings> options,
+        DatabaseManager databaseManager)
     {
         _logger = logger;
         _settings = options.Value;
+        _databaseManager = databaseManager;
+
+        _eventLogger = new EventLogger(_settings.ApplicationName);
     }
 
     public void Run()
@@ -24,6 +32,13 @@ internal class ScriptRunner
         try
         {
             string[] artifactSourceFolder = Directory.GetFiles(_settings.ScriptConfig.Folders.ArtifactSourceFolder);
+
+            if (artifactSourceFolder is not null && artifactSourceFolder.Length == 0)
+            {
+                _logger.LogInformation($"There are no scripts found inside '{_settings.ScriptConfig.Folders.ArtifactSourceFolder}' directory.");
+                _eventLogger.LogInformation($"There are no scripts found inside '{_settings.ScriptConfig.Folders.ArtifactSourceFolder}' directory.", (int)EventIds.NoScriptsFound);
+                return;
+            }
 
             foreach (var item in artifactSourceFolder)
             {
@@ -37,143 +52,116 @@ internal class ScriptRunner
                 }
                 else
                 {
+                    _eventLogger.LogError($"{extension} is not a supported file format, '.sql' is only supported!", (int)EventIds.NonSQLFileFound);
                     _logger.LogError($"{extension} is not a supported file format, .sql is only supported!");
                 }
 
-                string scriptToReadExecutionLog = $"SELECT TOP(1) * FROM {_settings.DatabaseConfig.LogTable} WHERE Status = 'success' ORDER BY ExecutionId DESC";
-
-                DataTable dataTable = GetDataFromDbTable(scriptToReadExecutionLog);
-
-                foreach (DataRow row in dataTable.Rows)
+                //execute script to find what is the latest execution point and from where the script should be executed. It is stored in a table.
+                var scriptParameters = new Dictionary<string, object>
                 {
-                    string? lastExecutionPoint = row["ExecutedTill"].ToString();
-                    if (string.IsNullOrWhiteSpace(lastExecutionPoint))
+                    {"Status", "success" }
+                };
+
+                _logger.LogInformation($"Started Reading Last Execution Point from {_settings.ScriptExecutionConfig.LogTable} database table -EventId: {(int)EventIds.RegularWorkflow}");
+                _eventLogger.LogInformation($"Started Reading Last Execution Point from {_settings.ScriptExecutionConfig.LogTable} database table", (int)EventIds.RegularWorkflow);
+
+                string scriptToReadExecutionLog = $"SELECT TOP(1) * FROM {_settings.ScriptExecutionConfig.LogTable} WHERE Status = @Status ORDER BY ScriptExecutionId DESC";
+                var parameterizedQuery = _databaseManager.CreateParameterizedQuery(scriptToReadExecutionLog, scriptParameters);
+
+                QueryResult<DataTable> result = _databaseManager.GetDataFromDbTable(parameterizedQuery);
+
+                if (!result.IsSuccess)
+                {
+                    _logger.LogInformation($"Could not read last Execution Point from {_settings.ScriptExecutionConfig.LogTable} database table, Error Details: {result.ErrorMessage}, -EventId: {(int)EventIds.CouldNotReadLastExecution}");
+                    _eventLogger.LogInformation($"Could not read last Execution Point from {_settings.ScriptExecutionConfig.LogTable} database table, Error Details: {result.ErrorMessage}", (int)EventIds.CouldNotReadLastExecution);
+                    return;
+                }
+
+                if (result.Data.Rows.Count == 0)
+                {
+                    _logger.LogInformation($"There is no record of last Execution Point in {_settings.ScriptExecutionConfig.LogTable} database table -EventId: {(int)EventIds.RegularWorkflow}");
+                    _eventLogger.LogInformation($"There is no record of last Execution Point in {_settings.ScriptExecutionConfig.LogTable} database table", (int)EventIds.RegularWorkflow);
+
+                    string scriptToExecute = _script;
+
+                    ProcessScriptExecution(scriptToExecute);
+                }
+                else
+                {
+                    foreach (DataRow row in result.Data.Rows)
                     {
-                        //If this is the case consider it is being executed for the first time.
-                    }
-                    else
-                    {
+                        string lastExecutionPoint = row["ExecutedTill"].ToString();
+
+                        _logger.LogInformation($"Last Execution Point from {_settings.ScriptExecutionConfig.LogTable} database table is '{lastExecutionPoint}' -EventId: {(int)EventIds.RegularWorkflow}");
+                        _eventLogger.LogInformation($"Could not read last Execution Point from {_settings.ScriptExecutionConfig.LogTable} database table is '{lastExecutionPoint}'", (int)EventIds.RegularWorkflow);
+
                         int scriptStartIndex = _script.LastIndexOf(lastExecutionPoint);
                         string scriptToExecute = _script.Substring(scriptStartIndex + lastExecutionPoint.Length);
 
-                        string scriptSourceFolder = _settings.ScriptConfig.Folders.ScriptSourceFolder;
-
-                        if (!Directory.Exists(scriptSourceFolder))
-                        {
-                            Directory.CreateDirectory(scriptSourceFolder);
-                        }
-
-                        string scriptStartPattern = _settings.ScriptConfig.ScriptStartPattern;
-                        string scriptEndPattern = _settings.ScriptConfig.ScriptEndPattern;
-
-                        MatchCollection startMatches = Regex.Matches(scriptToExecute, scriptStartPattern, RegexOptions.Multiline);
-                        MatchCollection endMatches = Regex.Matches(scriptToExecute, scriptEndPattern, RegexOptions.Multiline);
-
-                        if (endMatches is not null && endMatches.Count > 0)
-                        {
-                            string fileName = $"script_executed_till_{endMatches?.LastOrDefault()?.Groups[1].Value}";
-                            string fileLocation = Path.Combine(scriptSourceFolder, ($"{fileName}{Path.GetExtension(".sql")}"));
-
-                            File.WriteAllTextAsync(fileLocation, scriptToExecute);
-
-
-                            Match lastMatch = endMatches[endMatches.Count - 1];
-
-                            string versionNumber = lastMatch.Groups[1].Value;
-
-                            QueryExecutionResponse response = ExecuteQuery(scriptToExecute);
-
-                            if (response.IsSuccess)
-                            {
-                                //Create query to insert success result
-                            }
-                            else
-                            {
-                                //Create query to insert error result
-                            }
-                        }
-
+                        ProcessScriptExecution(scriptToExecute);
                     }
-
                 }
-
             }
+        }
+        catch (SqlException ex)
+        {
+            _logger.LogError($"Sql Exception Caught while processing scripts -EventId: {(int)EventIds.SqlError}, Exception Details: {ex.Message}");
+            _eventLogger.LogError($"Sql Exception Caught while processing scripts, Exception Details: {ex.Message}", (int)EventIds.SqlError);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex.Message.ToString());
+            _logger.LogError($"Exception Caught while processing scripts -EventId: {(int)EventIds.ExceptionCaught}, Exception Details: {ex.Message}");
+            _eventLogger.LogError($"Exception Caught while processing scripts, Exception Details: {ex.Message}", (int)EventIds.ExceptionCaught);
             throw;
         }
-
     }
 
-    private QueryExecutionResponse ExecuteQuery(string queryString)
+    private void ProcessScriptExecution(string scriptToExecute)
     {
-        using (SqlConnection connection = new SqlConnection(_settings.ConnectionStrings.TargetDB))
-        {
-            connection.Open();
-            using (SqlTransaction transaction = connection.BeginTransaction())
-            {
-                try
-                {
-                    // Split the script by "GO" (case insensitive) and trim each batch
-                    string[] batches = Regex.Split(queryString, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase);
-                    foreach (var batch in batches)
-                    {
-                        if (!string.IsNullOrWhiteSpace(batch))
-                        {
-                            using (SqlCommand command = new SqlCommand(batch, connection, transaction))
-                            {
-                                command.ExecuteNonQuery();
-                            }
-                        }
-                    }
-                    transaction.Commit();
-                    Console.WriteLine("Script executed successfully.");
-                    return new QueryExecutionResponse { IsSuccess = true, ErrorMessage = string.Empty };
-                }
-                catch (Exception ex)
-                {
-                    try
-                    {
-                        transaction.Rollback();
-                    }
-                    catch (Exception rollbackEx)
-                    {
-                        Console.WriteLine("Rollback failed: " + rollbackEx.Message);
-                    }
-                    Console.WriteLine("Error executing script: " + ex.Message);
-                    return new QueryExecutionResponse { IsSuccess = false, ErrorMessage = ex.Message };
-                }
-            }
-        }
-    }
+        string scriptSourceFolder = _settings.ScriptConfig.Folders.ScriptSourceFolder;
 
-
-    private DataTable GetDataFromDbTable(string script)
-    {
-        DataTable dataTable = new DataTable();
-        using (SqlConnection connection = new SqlConnection(_settings.ConnectionStrings.TargetDB))
+        if (!Directory.Exists(scriptSourceFolder))
         {
-            try
-            {
-                connection.Open();
-                using (SqlDataAdapter adapter = new SqlDataAdapter(script, connection))
-                {
-                    adapter.Fill(dataTable);
-                }
-            }
-            catch (SqlException e)
-            {
-                _logger.LogError($"SQL Error: {e.Message}");
-                Console.WriteLine($"SQL Error: {e.Message}");
-            }
-            catch (Exception e)
-            {
-                _logger.LogError($"Error: {e.Message}");
-                Console.WriteLine($"Error: {e.Message}");
-            }
+            Directory.CreateDirectory(scriptSourceFolder);
         }
-        return dataTable;
+
+        string scriptStartPattern = _settings.ScriptConfig.ScriptStartPattern;
+        string scriptEndPattern = _settings.ScriptConfig.ScriptEndPattern;
+
+        Console.WriteLine(scriptStartPattern);
+        Console.WriteLine(scriptEndPattern);
+        MatchCollection startMatches = Regex.Matches(scriptToExecute, scriptStartPattern, RegexOptions.Multiline);
+        MatchCollection endMatches = Regex.Matches(scriptToExecute, scriptEndPattern, RegexOptions.Multiline);
+
+        if (endMatches is not null && endMatches.Count > 0)
+        {
+            string fileName = $"script_till_V_{endMatches?.LastOrDefault()?.Groups[1].Value}";
+            string fileLocation = Path.Combine(scriptSourceFolder, ($"{fileName}{Path.GetExtension(".sql")}"));
+
+            File.WriteAllTextAsync(fileLocation, scriptToExecute);
+
+            Match lastMatch = endMatches[endMatches.Count - 1];
+
+            string scriptVersion = lastMatch.Groups[1].Value;
+
+            QueryExecutionResponse response = _databaseManager.ExecuteQuery(scriptToExecute);
+
+            var scriptExecutionLog = new ScriptExecutionLog
+            {
+                ExecutionDate = DateTimeOffset.UtcNow,
+                ExecutedTill = lastMatch.Value,
+                ScriptVersion = scriptVersion
+            };
+
+            _databaseManager.LogScriptExecution(response, scriptExecutionLog, startMatches[0]?.Value, lastMatch.Value);
+
+            _logger.LogInformation($"Script executed Successfully -EventId: {(int)EventIds.SqlScriptSuccess}");
+            _eventLogger.LogInformation($"Script executed Successfully", (int)EventIds.SqlScriptSuccess);
+        }
+        else
+        {
+            _logger.LogInformation("There is nothing to execute, everything is up to date.");
+            _eventLogger.LogInformation($"There is nothing to execute, everything is up to date.", (int)EventIds.ExceptionCaught);
+        }
     }
 }

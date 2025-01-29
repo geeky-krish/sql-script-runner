@@ -2,30 +2,32 @@
 
 internal sealed class AppSettings
 {
+    public required string ApplicationName { get; set; }
     public required ConnectionStrings ConnectionStrings { get; set; }
     public required ScriptConfig ScriptConfig { get; set; }
-    public required DatabaseConfig DatabaseConfig { get; set; }
+    public required ScriptExecutionConfig ScriptExecutionConfig { get; set; }
 }
 
 internal sealed class ConnectionStrings
 {
-    public string TargetDB { get; set; } = string.Empty;
+    public required string TargetDB { get; set; }
 }
 
 internal sealed class ScriptConfig
 {
-    public string ScriptStartPattern { get; set; } = string.Empty;
-    public string ScriptEndPattern { get; set; } = string.Empty;
+    public required string ScriptStartPattern { get; set; }
+    public required string ScriptEndPattern { get; set; }
     public required Folders Folders { get; set; }
 }
 
 internal sealed class Folders
 {
-    public string ArtifactSourceFolder { get; set; } = string.Empty;
-    public string ScriptSourceFolder { get; set; } = string.Empty;
+    public required string ArtifactSourceFolder { get; set; }
+    public required string ScriptSourceFolder { get; set; }
 }
 
-internal sealed class DatabaseConfig
+internal sealed class ScriptExecutionConfig
 {
-    public string LogTable { get; set; } = string.Empty;
+    public required string LogTable { get; set; }
+    public required int ExecutionTimeOutInSeconds { get; set; }
 }

@@ -1,6 +1,8 @@
 ﻿using System.Runtime.InteropServices;
+using System.Security.Principal;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
 using SQLScripRunner._helpers;
 using SQLScripRunner.Models;
 
@@ -20,31 +22,79 @@ public class Program
 
     public static void Main(string[] args)
     {
+        if (!IsAdministrator())
+        {
+            Console.WriteLine("To execute scripts from SQLScriptRunner app, It needs to run with Administrator Privileges.");
+            return;
+        }
+
+        DeleteMenu(GetSystemMenu(GetConsoleWindow(), false), SC_CLOSE, MF_BYCOMMAND);
+
+
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+            .Build();
+
+        // Read EventLogger source from appsettings.json
+        string appName = configuration.GetSection("ApplicationName").Value ?? "SQLScriptRunner";
+
+        // Ensure EventLogger object is created with the source.
+        EventLogger eventLog = new EventLogger(appName);
+
+        // Load configuration from logging.config.json
+        var logConfig = new ConfigurationBuilder()
+        .SetBasePath(AppContext.BaseDirectory)
+        .AddJsonFile("logging.config.json", optional: false, reloadOnChange: true)
+        .Build();
+
+        // Configure SeriLog
+        Log.Logger = new LoggerConfiguration()
+           .ReadFrom.Configuration(logConfig) // Read SeriLog settings
+           .Enrich.FromLogContext()
+           .CreateLogger();
+
         try
         {
-            DeleteMenu(GetSystemMenu(GetConsoleWindow(), false), SC_CLOSE, MF_BYCOMMAND);
-
             var services = new ServiceCollection();
 
-            var configuration = new ConfigurationBuilder()
-                .SetBasePath(AppContext.BaseDirectory)
-                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-                .Build();
+            Log.Information($"{appName} App Started, EventId: {(int)EventIds.AppStart}");
+
+            eventLog.LogInformation($"{appName} App Started,", (int)EventIds.AppStart);
 
             services.AddSingleton<IConfiguration>(configuration);
 
             services.Configure<AppSettings>(configuration);
 
+            // Add SeriLog as the logger
+            services.AddLogging(config => config.AddSerilog());
+
             services.AddTransient<ScriptRunner>();
+            services.AddTransient<DatabaseManager>();
 
             var serviceProvider = services.BuildServiceProvider();
 
             var scriptRunner = serviceProvider.GetRequiredService<ScriptRunner>();
+
+            Log.Information($"{appName} App Bootstrapped successfully -EventId:{(int)EventIds.AppStartedSuccessfully}");
+            eventLog.LogInformation($"{appName} App Bootstrapped successfully.", (int)EventIds.AppStartedSuccessfully);
+
             scriptRunner.Run();
         }
         catch (Exception ex)
         {
+            Log.Fatal($"{appName} Terminated unexpectedly, Exception Details: {ex.Message}");
+            eventLog.LogError($"{appName} Terminated unexpectedly, Exception Details: {ex.Message}", (int)EventIds.AppStartFailed);
             throw;
+        }
+    }
+
+    private static bool IsAdministrator()
+    {
+        using (var identity = WindowsIdentity.GetCurrent())
+        {
+            var principal = new WindowsPrincipal(identity);
+            return principal.IsInRole(WindowsBuiltInRole.Administrator);
         }
     }
 }
