@@ -4,27 +4,28 @@ using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SQLScripRunner.Common.Enums;
 using SQLScripRunner.Models;
 
-namespace SQLScripRunner._helpers;
+namespace SQLScripRunner.Services;
 
-internal sealed class DatabaseManager
+internal sealed class ScriptExecManagerService
 {
-    private readonly ILogger<DatabaseManager> _logger;
+    private readonly ILogger<ScriptExecManagerService> _logger;
     private readonly AppSettings _settings;
-    private readonly EventLogger _eventLogger;
+    private readonly EventLoggerService _eventLogger;
 
-    public DatabaseManager(ILogger<DatabaseManager> logger, IOptions<AppSettings> options)
+    public ScriptExecManagerService(ILogger<ScriptExecManagerService> logger, IOptions<AppSettings> options)
     {
         _logger = logger;
         _settings = options.Value;
-        _eventLogger = new EventLogger(_settings.ApplicationName);
+        _eventLogger = new EventLoggerService(_settings.ApplicationName);
     }
 
 
-    public DatabaseQuery CreateParameterizedQuery(string baseScript, Dictionary<string, object> parameters)
+    public ParameterizedQuery CreateParameterizedQuery(string baseScript, Dictionary<string, object> parameters)
     {
-        var query = new DatabaseQuery
+        var query = new ParameterizedQuery
         {
             SqlScript = baseScript
         };
@@ -40,8 +41,7 @@ internal sealed class DatabaseManager
         return query;
     }
 
-
-    public QueryResult<DataTable> GetDataFromDbTable(DatabaseQuery query)
+    public QueryResult<DataTable> GetDataFromDbTable(ParameterizedQuery query)
     {
         var result = new QueryResult<DataTable>
         {

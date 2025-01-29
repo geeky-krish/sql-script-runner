@@ -3,8 +3,9 @@ using System.Security.Principal;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
-using SQLScripRunner._helpers;
+using SQLScripRunner.Common.Enums;
 using SQLScripRunner.Models;
+using SQLScripRunner.Services;
 
 public class Program
 {
@@ -40,7 +41,7 @@ public class Program
         string appName = configuration.GetSection("ApplicationName").Value ?? "SQLScriptRunner";
 
         // Ensure EventLogger object is created with the source.
-        EventLogger eventLog = new EventLogger(appName);
+        EventLoggerService eventLog = new EventLoggerService(appName);
 
         // Load configuration from logging.config.json
         var logConfig = new ConfigurationBuilder()
@@ -69,12 +70,12 @@ public class Program
             // Add SeriLog as the logger
             services.AddLogging(config => config.AddSerilog());
 
-            services.AddTransient<ScriptRunner>();
-            services.AddTransient<DatabaseManager>();
+            services.AddTransient<ScriptRunnerService>();
+            services.AddTransient<ScriptExecManagerService>();
 
             var serviceProvider = services.BuildServiceProvider();
 
-            var scriptRunner = serviceProvider.GetRequiredService<ScriptRunner>();
+            var scriptRunner = serviceProvider.GetRequiredService<ScriptRunnerService>();
 
             Log.Information($"{appName} App Bootstrapped successfully -EventId:{(int)EventIds.AppStartedSuccessfully}");
             eventLog.LogInformation($"{appName} App Bootstrapped successfully.", (int)EventIds.AppStartedSuccessfully);

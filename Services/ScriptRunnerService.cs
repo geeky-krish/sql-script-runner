@@ -3,28 +3,29 @@ using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SQLScripRunner.Common.Enums;
 using SQLScripRunner.Models;
 
-namespace SQLScripRunner._helpers;
+namespace SQLScripRunner.Services;
 
-internal class ScriptRunner
+internal class ScriptRunnerService
 {
-    private readonly ILogger<ScriptRunner> _logger;
+    private readonly ILogger<ScriptRunnerService> _logger;
     private readonly AppSettings _settings;
-    private readonly DatabaseManager _databaseManager;
-    private readonly EventLogger _eventLogger;
+    private readonly ScriptExecManagerService _databaseManager;
+    private readonly EventLoggerService _eventLogger;
     private string _script = string.Empty;
 
-    public ScriptRunner(
-        ILogger<ScriptRunner> logger,
+    public ScriptRunnerService(
+        ILogger<ScriptRunnerService> logger,
         IOptions<AppSettings> options,
-        DatabaseManager databaseManager)
+        ScriptExecManagerService databaseManager)
     {
         _logger = logger;
         _settings = options.Value;
         _databaseManager = databaseManager;
 
-        _eventLogger = new EventLogger(_settings.ApplicationName);
+        _eventLogger = new EventLoggerService(_settings.ApplicationName);
     }
 
     public void Run()
@@ -136,7 +137,7 @@ internal class ScriptRunner
         if (endMatches is not null && endMatches.Count > 0)
         {
             string fileName = $"script_till_V_{endMatches?.LastOrDefault()?.Groups[1].Value}";
-            string fileLocation = Path.Combine(scriptSourceFolder, ($"{fileName}{Path.GetExtension(".sql")}"));
+            string fileLocation = Path.Combine(scriptSourceFolder, $"{fileName}{Path.GetExtension(".sql")}");
 
             File.WriteAllTextAsync(fileLocation, scriptToExecute);
 

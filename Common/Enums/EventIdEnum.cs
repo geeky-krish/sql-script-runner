@@ -1,4 +1,4 @@
-﻿namespace SQLScripRunner.Models;
+﻿namespace SQLScripRunner.Common.Enums;
 
 public enum EventIds
 {

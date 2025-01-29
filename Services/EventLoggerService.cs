@@ -1,13 +1,14 @@
 ﻿using System.Diagnostics;
+using System.Runtime.Versioning;
 
-namespace SQLScripRunner._helpers;
+namespace SQLScripRunner.Services;
 
-internal sealed class EventLogger
+internal sealed class EventLoggerService
 {
     private readonly string _source; // Source for Event Log in Event Viewer
     private readonly string _logName; // Name of the Log to categorize it as Application Events
 
-    public EventLogger(string source, string logName = "Application")
+    public EventLoggerService(string source, string logName = "Application")
     {
         _source = source;
         _logName = logName;
