@@ -10,6 +10,7 @@ SQL Script Runner is a utility designed to execute SQL scripts in batches while 
 - Provides structured event logging with categorized event IDs.
 - Allows configurable script start and end patterns for better script control.
 - Notification through Email (yet to be implemented)
+- Bind windows event logs with ILogger instead of creating separate instance to log into Windows Event Viewer(Yet to be done)
 
 ## Tech Stack
 - **Backend:** C# (.NET)
