@@ -3,7 +3,8 @@
         "Using": [
             "Serilog.Sinks.Console",
             "Serilog.Sinks.File",
-            "Serilog.Sinks.Seq"
+            "Serilog.Sinks.Seq",
+            "Serilog.Sinks.EventLog"
         ],
         "MinimumLevel": {
             "Default": "Information",
@@ -39,6 +40,17 @@
                     "formatter": {
                         "type": "Serilog.Formatting.Compact.CompactJsonFormatter, Serilog.Formatting.Compact"
                     }
+                }
+            },
+            {
+                "Name": "EventLog",
+                "Args": {
+                    "source": "SQLScriptRunner",
+                    "logName": "Application",
+                    "manageEventSource": true,
+                    "restrictedToMinimumLevel": "Information",
+                    "outputTemplate": "{Message}",
+                    "eventIdProvider": "SQLScriptRunner.Services.EventIdProvider::Instance, SQLScriptRunner"
                 }
             }
         ],

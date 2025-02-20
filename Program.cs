@@ -3,9 +3,9 @@ using System.Security.Principal;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
-using SQLScripRunner.Common.Enums;
-using SQLScripRunner.Models;
-using SQLScripRunner.Services;
+using SQLScriptRunner.Common.Enums;
+using SQLScriptRunner.Models;
+using SQLScriptRunner.Services;
 
 public class Program
 {
@@ -40,9 +40,6 @@ public class Program
         // Read EventLogger source from appsettings.json
         string appName = configuration.GetSection("ApplicationName").Value ?? "SQLScriptRunner";
 
-        // Ensure EventLogger object is created with the source.
-        EventLoggerService eventLog = new EventLoggerService(appName);
-
         // Load configuration from logging.config.json
         var logConfig = new ConfigurationBuilder()
         .SetBasePath(AppContext.BaseDirectory)
@@ -61,8 +58,6 @@ public class Program
 
             Log.Information($"{appName} App Started, EventId: {(int)EventIds.AppStart}");
 
-            eventLog.LogInformation($"{appName} App Started,", (int)EventIds.AppStart);
-
             services.AddSingleton<IConfiguration>(configuration);
 
             services.Configure<AppSettings>(configuration);
@@ -78,14 +73,12 @@ public class Program
             var scriptRunner = serviceProvider.GetRequiredService<ScriptRunnerService>();
 
             Log.Information($"{appName} App Bootstrapped successfully -EventId:{(int)EventIds.AppStartedSuccessfully}");
-            eventLog.LogInformation($"{appName} App Bootstrapped successfully.", (int)EventIds.AppStartedSuccessfully);
 
             scriptRunner.Run();
         }
         catch (Exception ex)
         {
             Log.Fatal($"{appName} Terminated unexpectedly, Exception Details: {ex.Message}");
-            eventLog.LogError($"{appName} Terminated unexpectedly, Exception Details: {ex.Message}", (int)EventIds.AppStartFailed);
             throw;
         }
     }

@@ -1,8 +1,8 @@
 ﻿using System.Diagnostics;
-using System.Runtime.Versioning;
 
-namespace SQLScripRunner.Services;
+namespace SQLScriptRunner.Services;
 
+[Obsolete("Since we are using Serilog for logging every events, we are now obsoleting this class", true)]
 internal sealed class EventLoggerService
 {
     private readonly string _source; // Source for Event Log in Event Viewer

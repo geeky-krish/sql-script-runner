@@ -3,29 +3,26 @@ using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using SQLScripRunner.Common.Enums;
-using SQLScripRunner.Models;
+using SQLScriptRunner.Models;
+using SQLScriptRunner.Common.Enums;
 
-namespace SQLScripRunner.Services;
+namespace SQLScriptRunner.Services;
 
 internal class ScriptRunnerService
 {
     private readonly ILogger<ScriptRunnerService> _logger;
     private readonly AppSettings _settings;
-    private readonly ScriptExecManagerService _databaseManager;
-    private readonly EventLoggerService _eventLogger;
+    private readonly ScriptExecManagerService _scriptExecManager;
     private string _script = string.Empty;
 
     public ScriptRunnerService(
         ILogger<ScriptRunnerService> logger,
         IOptions<AppSettings> options,
-        ScriptExecManagerService databaseManager)
+        ScriptExecManagerService scriptExecManager)
     {
         _logger = logger;
         _settings = options.Value;
-        _databaseManager = databaseManager;
-
-        _eventLogger = new EventLoggerService(_settings.ApplicationName);
+        _scriptExecManager = scriptExecManager;
     }
 
     public void Run()
@@ -36,8 +33,7 @@ internal class ScriptRunnerService
 
             if (artifactSourceFolder is not null && artifactSourceFolder.Length == 0)
             {
-                _logger.LogInformation($"There are no scripts found inside '{_settings.ScriptConfig.Folders.ArtifactSourceFolder}' directory.");
-                _eventLogger.LogInformation($"There are no scripts found inside '{_settings.ScriptConfig.Folders.ArtifactSourceFolder}' directory.", (int)EventIds.NoScriptsFound);
+                _logger.LogInformation("There are no scripts found inside '{ArtifactSourceFolder}' directory.", _settings.ScriptConfig.Folders.ArtifactSourceFolder);
                 return;
             }
 
@@ -53,8 +49,7 @@ internal class ScriptRunnerService
                 }
                 else
                 {
-                    _eventLogger.LogError($"{extension} is not a supported file format, '.sql' is only supported!", (int)EventIds.NonSQLFileFound);
-                    _logger.LogError($"{extension} is not a supported file format, .sql is only supported!");
+                    _logger.LogError("{Extension} is not a supported file format, .sql is only supported!", extension);
                 }
 
                 //execute script to find what is the latest execution point and from where the script should be executed. It is stored in a table.
@@ -63,25 +58,22 @@ internal class ScriptRunnerService
                     {"Status", "success" }
                 };
 
-                _logger.LogInformation($"Started Reading Last Execution Point from {_settings.ScriptExecutionConfig.LogTable} database table -EventId: {(int)EventIds.RegularWorkflow}");
-                _eventLogger.LogInformation($"Started Reading Last Execution Point from {_settings.ScriptExecutionConfig.LogTable} database table", (int)EventIds.RegularWorkflow);
+                _logger.LogInformation((int)EventIds.RegularWorkflow, "Started Reading Last Execution Point from {LogTable} database table.", _settings.ScriptExecutionConfig.LogTable);
 
                 string scriptToReadExecutionLog = $"SELECT TOP(1) * FROM {_settings.ScriptExecutionConfig.LogTable} WHERE Status = @Status ORDER BY ScriptExecutionId DESC";
-                var parameterizedQuery = _databaseManager.CreateParameterizedQuery(scriptToReadExecutionLog, scriptParameters);
+                var parameterizedQuery = _scriptExecManager.CreateParameterizedQuery(scriptToReadExecutionLog, scriptParameters);
 
-                QueryResult<DataTable> result = _databaseManager.GetDataFromDbTable(parameterizedQuery);
+                QueryResult<DataTable> result = _scriptExecManager.GetDataFromDbTable(parameterizedQuery);
 
                 if (!result.IsSuccess)
                 {
-                    _logger.LogInformation($"Could not read last Execution Point from {_settings.ScriptExecutionConfig.LogTable} database table, Error Details: {result.ErrorMessage}, -EventId: {(int)EventIds.CouldNotReadLastExecution}");
-                    _eventLogger.LogInformation($"Could not read last Execution Point from {_settings.ScriptExecutionConfig.LogTable} database table, Error Details: {result.ErrorMessage}", (int)EventIds.CouldNotReadLastExecution);
+                    _logger.LogInformation((int)EventIds.CouldNotReadLastExecution, "Could not read last Execution Point from {LogTable} database table, Error Details: {ErrorMessage}.", _settings.ScriptExecutionConfig.LogTable, result.ErrorMessage);
                     return;
                 }
 
                 if (result.Data.Rows.Count == 0)
                 {
-                    _logger.LogInformation($"There is no record of last Execution Point in {_settings.ScriptExecutionConfig.LogTable} database table -EventId: {(int)EventIds.RegularWorkflow}");
-                    _eventLogger.LogInformation($"There is no record of last Execution Point in {_settings.ScriptExecutionConfig.LogTable} database table", (int)EventIds.RegularWorkflow);
+                    _logger.LogInformation((int)EventIds.RegularWorkflow, "There is no record of last Execution Point in {LogTable} database table.", _settings.ScriptExecutionConfig.LogTable);
 
                     string scriptToExecute = _script;
 
@@ -93,8 +85,7 @@ internal class ScriptRunnerService
                     {
                         string lastExecutionPoint = row["ExecutedTill"].ToString();
 
-                        _logger.LogInformation($"Last Execution Point from {_settings.ScriptExecutionConfig.LogTable} database table is '{lastExecutionPoint}' -EventId: {(int)EventIds.RegularWorkflow}");
-                        _eventLogger.LogInformation($"Could not read last Execution Point from {_settings.ScriptExecutionConfig.LogTable} database table is '{lastExecutionPoint}'", (int)EventIds.RegularWorkflow);
+                        _logger.LogInformation((int)EventIds.RegularWorkflow, "Last Execution Point from {LogTable} database table is {LastExecutionPoint}", _settings.ScriptExecutionConfig.LogTable, lastExecutionPoint);
 
                         int scriptStartIndex = _script.LastIndexOf(lastExecutionPoint);
                         string scriptToExecute = _script.Substring(scriptStartIndex + lastExecutionPoint.Length);
@@ -106,13 +97,11 @@ internal class ScriptRunnerService
         }
         catch (SqlException ex)
         {
-            _logger.LogError($"Sql Exception Caught while processing scripts -EventId: {(int)EventIds.SqlError}, Exception Details: {ex.Message}");
-            _eventLogger.LogError($"Sql Exception Caught while processing scripts, Exception Details: {ex.Message}", (int)EventIds.SqlError);
+            _logger.LogError((int)EventIds.SqlError, "Sql Exception Caught while processing scripts, Exception Details: {ExMessage}", ex.Message);
         }
         catch (Exception ex)
         {
-            _logger.LogError($"Exception Caught while processing scripts -EventId: {(int)EventIds.ExceptionCaught}, Exception Details: {ex.Message}");
-            _eventLogger.LogError($"Exception Caught while processing scripts, Exception Details: {ex.Message}", (int)EventIds.ExceptionCaught);
+            _logger.LogError((int)EventIds.ExceptionCaught, "Exception Caught while processing scripts, Exception Details: {ExMessage}", ex.Message);
             throw;
         }
     }
@@ -145,7 +134,7 @@ internal class ScriptRunnerService
 
             string scriptVersion = lastMatch.Groups[1].Value;
 
-            QueryExecutionResponse response = _databaseManager.ExecuteQuery(scriptToExecute);
+            QueryExecutionResponse response = _scriptExecManager.ExecuteQuery(scriptToExecute);
 
             var scriptExecutionLog = new ScriptExecutionLog
             {
@@ -154,15 +143,13 @@ internal class ScriptRunnerService
                 ScriptVersion = scriptVersion
             };
 
-            _databaseManager.LogScriptExecution(response, scriptExecutionLog, startMatches[0]?.Value, lastMatch.Value);
+            _scriptExecManager.LogScriptExecution(response, scriptExecutionLog, startMatches[0]?.Value, lastMatch.Value);
 
-            _logger.LogInformation($"Script executed Successfully -EventId: {(int)EventIds.SqlScriptSuccess}");
-            _eventLogger.LogInformation($"Script executed Successfully", (int)EventIds.SqlScriptSuccess);
+            _logger.LogInformation((int)EventIds.SqlScriptSuccess, "Script executed Successfully.");
         }
         else
         {
-            _logger.LogInformation("There is nothing to execute, everything is up to date.");
-            _eventLogger.LogInformation($"There is nothing to execute, everything is up to date.", (int)EventIds.ExceptionCaught);
+            _logger.LogInformation((int)EventIds.RegularWorkflow, "There is nothing to execute, everything is up to date.");
         }
     }
 }

@@ -4,24 +4,21 @@ using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using SQLScripRunner.Common.Enums;
-using SQLScripRunner.Models;
+using SQLScriptRunner.Common.Enums;
+using SQLScriptRunner.Models;
 
-namespace SQLScripRunner.Services;
+namespace SQLScriptRunner.Services;
 
 internal sealed class ScriptExecManagerService
 {
     private readonly ILogger<ScriptExecManagerService> _logger;
     private readonly AppSettings _settings;
-    private readonly EventLoggerService _eventLogger;
 
     public ScriptExecManagerService(ILogger<ScriptExecManagerService> logger, IOptions<AppSettings> options)
     {
         _logger = logger;
         _settings = options.Value;
-        _eventLogger = new EventLoggerService(_settings.ApplicationName);
     }
-
 
     public ParameterizedQuery CreateParameterizedQuery(string baseScript, Dictionary<string, object> parameters)
     {
@@ -52,8 +49,7 @@ internal sealed class ScriptExecManagerService
         {
             result.IsSuccess = false;
             result.ErrorMessage = "SQL script cannot be null or empty";
-            _logger.LogError(result.ErrorMessage);
-            _eventLogger.LogError(result.ErrorMessage, (int)EventIds.SqlScriptCannotBeEmpty);
+            _logger.LogError((int)EventIds.SqlScriptCannotBeEmpty, result.ErrorMessage);
             return result;
         }
 
@@ -83,18 +79,15 @@ internal sealed class ScriptExecManagerService
             {
                 result.IsSuccess = false;
                 result.ErrorMessage = $"Database error occurred: {ex.Message}";
-                _logger.LogError(ex, "SQL Error occurred while executing query. Error Code: {ErrorCode}", ex.Number);
-                _eventLogger.LogError($"SQL Error occurred while executing query. Error Code: {ex.Number}", (int)EventIds.SqlError);
+                _logger.LogError((int)EventIds.SqlError, ex, "SQL Error occurred while executing query. Error Code: {ErrorCode}", ex.Number);
 
                 // Log additional SQL-specific information
                 if (ex.Errors != null)
                 {
                     foreach (SqlError error in ex.Errors)
                     {
-                        _logger.LogError("SQL Error Details - Server: {Server}, Procedure: {Procedure}, Line: {Line}, Message: {Message}",
+                        _logger.LogError((int)EventIds.SqlError, "SQL Error Details - Server: {Server}, Procedure: {Procedure}, Line: {Line}, Message: {Message}",
                             error.Server, error.Procedure, error.LineNumber, error.Message);
-
-                        _eventLogger.LogError($"SQL Error Details - Server: {error.Server}, Procedure: {error.Procedure}, Line: {error.LineNumber}, Message: {error.Message}", (int)EventIds.SqlError);
                     }
                 }
             }
@@ -102,8 +95,7 @@ internal sealed class ScriptExecManagerService
             {
                 result.IsSuccess = false;
                 result.ErrorMessage = $"An unexpected error occurred: {ex.Message}";
-                _logger.LogError(ex, "Unexpected error occurred while executing query");
-                _eventLogger.LogError($"Unexpected error occurred while executing query, Exception Details: {ex.Message}", (int)EventIds.SqlError);
+                _logger.LogError((int)EventIds.SqlError, ex, "Unexpected error occurred while executing query");
             }
         }
 
@@ -136,7 +128,7 @@ internal sealed class ScriptExecManagerService
 
                     batchMessages.Add(message);
 
-                    _eventLogger.LogInformation($"Batch {currentBatchNumber}: {severity}: {error.Message} (Line: {error.LineNumber})", (int)EventIds.ExecutionBatchMessages);
+                    _logger.LogInformation((int)EventIds.ExecutionBatchMessages, "Batch {CurrentBatchNumber}: {Severity}: {ErrorMessage} (Line: {ErrorLineNumber})", currentBatchNumber, severity, error.Message, error.LineNumber);
                 }
             };
 
@@ -170,7 +162,7 @@ internal sealed class ScriptExecManagerService
                         using (SqlCommand command = new SqlCommand(batch, connection, transaction))
                         {
                             command.CommandTimeout = _settings.ScriptExecutionConfig.ExecutionTimeOutInSeconds;
-                            _eventLogger.LogInformation($"Executing batch {currentBatchNumber} of {batches.Length}", (int)EventIds.ExecutionBatchMessages);
+                            _logger.LogInformation((int)EventIds.ExecutionBatchMessages, "Executing batch {CurrentBatchNumber} of {BatchesLength}", currentBatchNumber, batches.Length);
 
                             command.ExecuteNonQuery();
 
@@ -179,7 +171,7 @@ internal sealed class ScriptExecManagerService
                     catch (SqlException sqlEx)
                     {
                         // Log error message
-                        _eventLogger.LogError($"Error in batch {currentBatchNumber}: Line {sqlEx.LineNumber}, " + $"Message: {sqlEx.Message}, " + $"Batch Script: {batch}", (int)EventIds.SqlError);
+                        _logger.LogError((int)EventIds.SqlError, "Error in batch {CurrentBatchNumber}: Line {SqlExLineNumber}, \n Message: {SqlExMessage}, \n Batch Script: {Batch}", currentBatchNumber, sqlEx.LineNumber, sqlEx.Message, batch);
 
                         throw new Exception($"Error in batch {currentBatchNumber}: Line {sqlEx.LineNumber}, " + $"Message: {sqlEx.Message}", sqlEx);
                     }
@@ -188,7 +180,7 @@ internal sealed class ScriptExecManagerService
                 transaction.Commit();
 
                 // Log final success message
-                _eventLogger.LogInformation($"SQL script executed successfully. Completed {batches.Length} batches.", (int)EventIds.SqlScriptSuccess);
+                _logger.LogInformation((int)EventIds.SqlScriptSuccess, "SQL script executed successfully. Completed {BatchesLength} batches.", batches.Length);
 
                 response.IsSuccess = true;
                 if (batchMessages is not null && batchMessages.Count > 0)
@@ -206,17 +198,17 @@ internal sealed class ScriptExecManagerService
                         transaction.Rollback();
 
                         // Log rollback message
-                        _eventLogger.LogInformation("Transaction rolled back successfully.", (int)EventIds.RollBackSuccessful);
+                        _logger.LogInformation((int)EventIds.RollBackSuccessful, "Transaction rolled back successfully.");
                     }
                     catch (Exception rollbackEx)
                     {
                         // Log rollback error message
-                        _eventLogger.LogError($"Transaction rollback failed: {rollbackEx.Message}", (int)EventIds.RollBackException);
+                        _logger.LogError((int)EventIds.RollBackException, "Transaction rollback failed: {RollbackExMessage}", rollbackEx.Message);
                         throw new AggregateException("Transaction rollback failed after execution error.", new[] { ex, rollbackEx });
                     }
                 }
 
-                _eventLogger.LogError($"SQL execution failed: {ex.Message}", (int)EventIds.SqlError);
+                _logger.LogError((int)EventIds.SqlError, "SQL execution failed: {ExMessage}", ex.Message);
                 response.IsSuccess = false;
                 response.ErrorMessage = ex.Message;
                 return response;

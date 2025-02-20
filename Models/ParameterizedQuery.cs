@@ -1,6 +1,6 @@
 ﻿using Microsoft.Data.SqlClient;
 
-namespace SQLScripRunner.Models;
+namespace SQLScriptRunner.Models;
 
 internal sealed class ParameterizedQuery
 {
