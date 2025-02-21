@@ -10,12 +10,13 @@ SQL Script Runner is a utility designed to execute SQL scripts in batches while 
 - Supports transactional execution with rollback on failure.
 - Provides structured event logging with categorized event IDs.
 - Allows configurable script start and end patterns for better script control.
-- Notification through Email (yet to be implemented)
+- Notification through Email to multiple Recipients.
 
 ## Tech Stack
 - **Backend:** C# (.NET)
 - **Database:** SQL Server
 - **Logging:** Windows Event Logging & SeriLog
+- **Email Notifications:** SMTP
 
 ## Prerequisites
 Before starting the application, you must execute the required database setup script.  
@@ -45,6 +46,18 @@ This script initializes necessary database tables required for logging script ex
     "ScriptExecutionConfig": {
         "LogTable": "LOG_ScriptExecutions",
         "ExecutionTimeOutInSeconds": 300
+    },
+    "SmtpConfig": {
+        "ServerName": "smtp.gmail.com",
+        "Port": 587,
+        "SenderName": "SQL Script Runner",
+        "SenderEmail": "your-email@gmail.com",
+        "Username": "your-email@gmail.com",
+        "Password": "your-email-password(you can generate app password in gmail)",
+        "IsSmtpServer": true,
+        "ProtocolName": "TLS",
+        "IsAuthenticatedRelay": false,
+        "RecipientEmails": "recipient1@example.com;recipient2@example.com"
     }
 }
 
@@ -66,6 +79,19 @@ CREATE TABLE Test (
 );
 --[END-V-1]--
 ```
+
+## Email Notification 
+The application now supports sending email notifications to multiple recipients after script execution. The email will include execution details such as execution status, execution time, and errors (if any).
+
+### Changes in `appsettings.json` for Email Support:
+- `SmtpConfig` section added with SMTP settings for sending emails.
+- `RecipientEmails` now supports multiple recipients using `;` as a separator.
+- Ensure that SMTP credentials are correctly configured for sending emails.
+
+### How It Works:
+- After script execution, an email is sent automatically.
+- The email includes execution details like Status, and Errors (if any).
+- Emails are sent to all recipients specified in `RecipientEmails`.
 
 ## Logging & Event Monitoring
 The application logs execution details to Windows Event Log.

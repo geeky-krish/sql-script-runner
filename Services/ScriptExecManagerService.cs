@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.SqlServer.Management.Smo;
 using SQLScriptRunner.Common.Enums;
 using SQLScriptRunner.Models;
 
@@ -13,11 +14,13 @@ internal sealed class ScriptExecManagerService
 {
     private readonly ILogger<ScriptExecManagerService> _logger;
     private readonly AppSettings _settings;
+    private readonly EmailService _emailService;
 
-    public ScriptExecManagerService(ILogger<ScriptExecManagerService> logger, IOptions<AppSettings> options)
+    public ScriptExecManagerService(ILogger<ScriptExecManagerService> logger, IOptions<AppSettings> options, EmailService emailService)
     {
         _logger = logger;
         _settings = options.Value;
+        _emailService = emailService;
     }
 
     public ParameterizedQuery CreateParameterizedQuery(string baseScript, Dictionary<string, object> parameters)
@@ -247,6 +250,9 @@ internal sealed class ScriptExecManagerService
                 INSERT INTO @LogTable (ExecutionDate, ExecutedTill, ScriptVersion, Status, ErrorMessage) 
                 VALUES (@ExecutionDate, @ExecutedTill, @ScriptVersion, @Status, @ErrorMessage)";
         }
+
+        //handle email notification.
+        _emailService.ComposeEmail(response, scriptExecutionLog);
 
         // Replace table name safely
         insertQuery = insertQuery.Replace("@LogTable", _settings.ScriptExecutionConfig.LogTable);

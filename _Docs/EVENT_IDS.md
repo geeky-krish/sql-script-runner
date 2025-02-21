@@ -5,6 +5,7 @@ This document provides a structured reference for the various Event IDs used in 
 | Event ID | Category                | Description |
 |----------|-------------------------|-------------|
 | 100      | Regular Workflow        | Application is working fine, running smoothly. |
+| 101      | Email Sent Successfully | Notify through email after query execution.  |
 | 1000     | Application Start/Stop  | Application started. |
 | 1001     | Application Start/Stop  | Application started successfully. |
 | 4002     | Application Start/Stop  | Application startup failed (unexpected error). |

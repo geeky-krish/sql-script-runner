@@ -6,6 +6,7 @@ internal sealed class AppSettings
     public required ConnectionStrings ConnectionStrings { get; set; }
     public required ScriptConfig ScriptConfig { get; set; }
     public required ScriptExecutionConfig ScriptExecutionConfig { get; set; }
+    public required SmtpConfiguration SmtpConfig { get; set; }
 }
 
 internal sealed class ConnectionStrings

@@ -128,7 +128,7 @@ internal class ScriptRunnerService
             string fileName = $"script_till_V_{endMatches?.LastOrDefault()?.Groups[1].Value}";
             string fileLocation = Path.Combine(scriptSourceFolder, $"{fileName}{Path.GetExtension(".sql")}");
 
-            File.WriteAllTextAsync(fileLocation, scriptToExecute);
+            File.WriteAllText(fileLocation, scriptToExecute);
 
             Match lastMatch = endMatches[endMatches.Count - 1];
 

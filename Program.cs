@@ -67,6 +67,7 @@ public class Program
 
             services.AddTransient<ScriptRunnerService>();
             services.AddTransient<ScriptExecManagerService>();
+            services.AddTransient<EmailService>();
 
             var serviceProvider = services.BuildServiceProvider();
 

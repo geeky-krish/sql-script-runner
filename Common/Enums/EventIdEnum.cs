@@ -4,6 +4,7 @@ public enum EventIds
 {
     // Regular Workflow logs
     RegularWorkflow = 100,              // Application is working fine, Running smoothly
+    EmailSentSuccessfully = 101,        // Notify through email after query execution
 
     // Application Start/Stop Events
     AppStart = 1000,                    // Application started.
