@@ -88,9 +88,27 @@ internal class ScriptRunnerService
                         _logger.LogInformation((int)EventIds.RegularWorkflow, "Last Execution Point from {LogTable} database table is {LastExecutionPoint}", _settings.ScriptExecutionConfig.LogTable, lastExecutionPoint);
 
                         int scriptStartIndex = _script.LastIndexOf(lastExecutionPoint);
-                        string scriptToExecute = _script.Substring(scriptStartIndex + lastExecutionPoint.Length);
 
-                        ProcessScriptExecution(scriptToExecute);
+                        string? scriptToExecute = string.Empty;
+                        //string? scriptToExecute = _script?.TrimEnd().Substring(scriptStartIndex + lastExecutionPoint.Length);
+
+                        if (scriptStartIndex == -1) 
+                        {
+                            scriptToExecute = _script;
+                        }
+                        else
+                        {
+                            scriptToExecute = _script?.TrimEnd().Substring(scriptStartIndex + lastExecutionPoint.Length);
+                        }
+
+                        if (String.IsNullOrWhiteSpace(scriptToExecute))
+                        {
+                            _logger.LogInformation((int)EventIds.RegularWorkflow, "No Script Found to Execute after {LastExecutionPoint} in file {fileName}", lastExecutionPoint, fileInfo.Name);
+                        }
+                        else
+                        {
+                            ProcessScriptExecution(scriptToExecute, lastExecutionPoint);
+                        }
                     }
                 }
             }
@@ -106,7 +124,7 @@ internal class ScriptRunnerService
         }
     }
 
-    private void ProcessScriptExecution(string scriptToExecute)
+    private void ProcessScriptExecution(string scriptToExecute, string lastExecutionPoint = "")
     {
         string scriptSourceFolder = _settings.ScriptConfig.Folders.ScriptSourceFolder;
 
@@ -123,8 +141,28 @@ internal class ScriptRunnerService
         MatchCollection startMatches = Regex.Matches(scriptToExecute, scriptStartPattern, RegexOptions.Multiline);
         MatchCollection endMatches = Regex.Matches(scriptToExecute, scriptEndPattern, RegexOptions.Multiline);
 
+
         if (endMatches is not null && endMatches.Count > 0)
         {
+            /*
+             * Below logic is to identify whether the script version is already executed. It checks the lastExecutionScriptVersion and the script version it matched in that file.
+             * This happens when there are multiple files in a single directory.
+             */
+            if (!String.IsNullOrWhiteSpace(lastExecutionPoint))
+            {
+                var endMatchedScriptVersion = endMatches.Select(s => s.Value).Last();
+
+                //It assumes the string is in (--[END-V-3]--) format as it looks in endMatches only
+                int extractedEndMatchedVersion = int.Parse(endMatchedScriptVersion.Split('-')[4].TrimEnd(']'));
+
+                int lastExecutedScriptVersion = int.Parse(lastExecutionPoint.Split('-')[4].TrimEnd(']'));
+                if (lastExecutedScriptVersion > extractedEndMatchedVersion)
+                {
+                    _logger.LogInformation((int)EventIds.RegularWorkflow, "This script version {ScriptVersion} is already executed!", endMatches.Select(s => s.Value).LastOrDefault());
+                    return;
+                }
+            }
+
             string fileName = $"script_till_V_{endMatches?.LastOrDefault()?.Groups[1].Value}";
             string fileLocation = Path.Combine(scriptSourceFolder, $"{fileName}{Path.GetExtension(".sql")}");
 
